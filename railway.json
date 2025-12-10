@@ -1,6 +1,6 @@
 {
   "build": {
-    "builder": "dockerfile"
+    "builder": "none"
   },
   "deploy": {
     "startCommand": "python verifier_bot.py"
