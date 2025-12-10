@@ -9,7 +9,7 @@ if not TOKEN:
 
 # Channel IDs
 INTRO_CHANNEL_ID = 1448237276642410589    # 📰︱ruang-interogasi
-CHANGE_NAME_CHANNEL_ID = 1448276023987933327  # 👨︱ganti-username
+CHANGE_NAME_CHANNEL_ID = 1448292386932527156  # 👨︱ganti-username
 CHAT_CHANNEL_ID = 1447842346183168062    # 💬︱obrolan-santai
 
 # Role Names
