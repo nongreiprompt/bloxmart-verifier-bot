@@ -53,20 +53,6 @@ except Exception as e:
 def has_admin_role(member):
     return any(role.name == ADMIN_ROLE_NAME for role in member.roles)
 
-def extract_all_user_ids(content):
-    """Ekstrak semua user ID dari mention <@...> atau angka ID."""
-    user_ids = []
-    mentions = re.findall(r'<@!?(\d+)>', content)
-    user_ids.extend([int(uid) for uid in mentions])
-
-    if not user_ids:
-        parts = content.split()
-        for part in parts[1:]:
-            if part.isdigit() and len(part) >= 17:
-                user_ids.append(int(part))
-
-    return user_ids
-
 # === EVENTS ===
 @bot.event
 async def on_ready():
@@ -204,322 +190,312 @@ async def on_message(message):
 
     # --- HANDLE SEMUA COMMAND !! (HANYA UNTUK SUPER-ADMIN) ---
     if message.content.startswith("!!") and has_admin_role(message.author):
-        try:
-            content = message.content.strip()
-            guild = message.guild
+        content = message.content.strip()
+        guild = message.guild
 
-            # !!pull1 @user1 @user2 ...
-            if content.startswith("!!pull1 "):
-                user_ids = extract_all_user_ids(content)
-                if not user_ids:
-                    await message.channel.send("❌ Tidak ada user yang valid. Gunakan: `!!pull1 @user1 @user2` atau `!!pull1 ID1 ID2`")
-                    return
+        # !!pull1 → hapus VIP LOUNGE dari semua, beri VIP 1
+        if content == "!!pull1":
+            vip_lounge_role = guild.get_role(VIP_LOUNGE_ROLE_ID)
+            vip1_role = guild.get_role(VIP1_ROLE_ID)
 
-                vip_lounge_role = guild.get_role(VIP_LOUNGE_ROLE_ID)
-                vip1_role = guild.get_role(VIP1_ROLE_ID)
+            if not vip_lounge_role:
+                await message.channel.send(f"❌ Role VIP LOUNGE (ID: {VIP_LOUNGE_ROLE_ID}) tidak ditemukan!")
+                return
+            if not vip1_role:
+                await message.channel.send(f"❌ Role VIP 1 (ID: {VIP1_ROLE_ID}) tidak ditemukan!")
+                return
 
-                if not vip_lounge_role:
-                    await message.channel.send(f"❌ Role VIP LOUNGE (ID: {VIP_LOUNGE_ROLE_ID}) tidak ditemukan!")
-                    return
-                if not vip1_role:
-                    await message.channel.send(f"❌ Role VIP 1 (ID: {VIP1_ROLE_ID}) tidak ditemukan!")
-                    return
+            members_with_vip_lounge = [m for m in guild.members if vip_lounge_role in m.roles]
+            if not members_with_vip_lounge:
+                await message.channel.send("ℹ️ Tidak ada member yang memiliki role `VIP LOUNGE`.")
+                return
 
-                success_users = []
-                not_found = []
+            success_count = 0
+            for member in members_with_vip_lounge:
+                try:
+                    await member.remove_roles(vip_lounge_role)
+                    if vip1_role not in member.roles:
+                        await member.add_roles(vip1_role)
+                    success_count += 1
+                except discord.Forbidden:
+                    print(f"⚠️ Gagal ubah role untuk {member} (izin tidak cukup)")
 
-                for uid in user_ids:
-                    target = guild.get_member(uid)
-                    if not target:
-                        not_found.append(str(uid))
-                        continue
+            await message.channel.send(f"✅ Berhasil ubah `{success_count}` member dari `VIP LOUNGE` ke `VIP 1`.")
 
+        # !!pull2 → hapus VIP LOUNGE dari semua, beri VIP 2
+        elif content == "!!pull2":
+            vip_lounge_role = guild.get_role(VIP_LOUNGE_ROLE_ID)
+            vip2_role = guild.get_role(VIP2_ROLE_ID)
+
+            if not vip_lounge_role:
+                await message.channel.send(f"❌ Role VIP LOUNGE (ID: {VIP_LOUNGE_ROLE_ID}) tidak ditemukan!")
+                return
+            if not vip2_role:
+                await message.channel.send(f"❌ Role VIP 2 (ID: {VIP2_ROLE_ID}) tidak ditemukan!")
+                return
+
+            members_with_vip_lounge = [m for m in guild.members if vip_lounge_role in m.roles]
+            if not members_with_vip_lounge:
+                await message.channel.send("ℹ️ Tidak ada member yang memiliki role `VIP LOUNGE`.")
+                return
+
+            success_count = 0
+            for member in members_with_vip_lounge:
+                try:
+                    await member.remove_roles(vip_lounge_role)
+                    if vip2_role not in member.roles:
+                        await member.add_roles(vip2_role)
+                    success_count += 1
+                except discord.Forbidden:
+                    print(f"⚠️ Gagal ubah role untuk {member} (izin tidak cukup)")
+
+            await message.channel.send(f"✅ Berhasil ubah `{success_count}` member dari `VIP LOUNGE` ke `VIP 2`.")
+
+        # !!v → beri VIP LOUNGE (untuk admin)
+        elif content.startswith("!!v "):
+            user_ids = []
+            mentions = re.findall(r'<@!?(\d+)>', content)
+            user_ids.extend([int(uid) for uid in mentions])
+            if not user_ids:
+                parts = content.split()
+                for part in parts[1:]:
+                    if part.isdigit() and len(part) >= 17:
+                        user_ids.append(int(part))
+
+            if not user_ids:
+                await message.channel.send("❌ Tidak ada user yang valid. Gunakan: `!!v @user1 @user2` atau `!!v ID1 ID2`")
+                return
+
+            role = guild.get_role(VIP_LOUNGE_ROLE_ID)
+            if not role:
+                await message.channel.send(f"❌ Role VIP LOUNGE (ID: {VIP_LOUNGE_ROLE_ID}) tidak ditemukan!")
+                return
+
+            success_users = []
+            already_have = []
+            not_found = []
+
+            for uid in user_ids:
+                target = guild.get_member(uid)
+                if not target:
+                    not_found.append(str(uid))
+                    continue
+
+                if role in target.roles:
+                    already_have.append(target.mention)
+                else:
                     try:
-                        if vip_lounge_role in target.roles:
-                            await target.remove_roles(vip_lounge_role)
-                        if vip1_role not in target.roles:
-                            await target.add_roles(vip1_role)
+                        await target.add_roles(role)
                         success_users.append(target.mention)
                     except discord.Forbidden:
-                        print(f"⚠️ Gagal ubah role untuk {target} (izin tidak cukup)")
+                        print(f"⚠️ Gagal beri role ke {target} (izin tidak cukup)")
 
-                msg_parts = []
-                if success_users:
-                    msg_parts.append(f"✅ Berhasil ubah ke `VIP 1` untuk: {', '.join(success_users)}")
-                if not_found:
-                    msg_parts.append(f"❌ User tidak ditemukan: {len(not_found)} ID")
+            msg_parts = []
+            if success_users:
+                msg_parts.append(f"✅ Berhasil beri role `VIP LOUNGE` ke: {', '.join(success_users)}")
+            if already_have:
+                msg_parts.append(f"ℹ️ Sudah punya role: {', '.join(already_have)}")
+            if not_found:
+                msg_parts.append(f"❌ User tidak ditemukan: {len(not_found)} ID")
 
-                await message.channel.send("\n".join(msg_parts))
+            await message.channel.send("\n".join(msg_parts))
 
-            # !!pull2 @user1 @user2 ...
-            elif content.startswith("!!pull2 "):
-                user_ids = extract_all_user_ids(content)
-                if not user_ids:
-                    await message.channel.send("❌ Tidak ada user yang valid. Gunakan: `!!pull2 @user1 @user2` atau `!!pull2 ID1 ID2`")
-                    return
+        # !!1 → beri VIP 1
+        elif content.startswith("!!1 "):
+            user_ids = []
+            mentions = re.findall(r'<@!?(\d+)>', content)
+            user_ids.extend([int(uid) for uid in mentions])
+            if not user_ids:
+                parts = content.split()
+                for part in parts[1:]:
+                    if part.isdigit() and len(part) >= 17:
+                        user_ids.append(int(part))
 
-                vip_lounge_role = guild.get_role(VIP_LOUNGE_ROLE_ID)
-                vip2_role = guild.get_role(VIP2_ROLE_ID)
+            if not user_ids:
+                await message.channel.send("❌ Tidak ada user yang valid. Gunakan: `!!1 @user1 @user2` atau `!!1 ID1 ID2`")
+                return
 
-                if not vip_lounge_role:
-                    await message.channel.send(f"❌ Role VIP LOUNGE (ID: {VIP_LOUNGE_ROLE_ID}) tidak ditemukan!")
-                    return
-                if not vip2_role:
-                    await message.channel.send(f"❌ Role VIP 2 (ID: {VIP2_ROLE_ID}) tidak ditemukan!")
-                    return
+            role = guild.get_role(VIP1_ROLE_ID)
+            if not role:
+                await message.channel.send(f"❌ Role VIP 1 (ID: {VIP1_ROLE_ID}) tidak ditemukan!")
+                return
 
-                success_users = []
-                not_found = []
+            success_users = []
+            already_have = []
+            not_found = []
 
-                for uid in user_ids:
-                    target = guild.get_member(uid)
-                    if not target:
-                        not_found.append(str(uid))
-                        continue
+            for uid in user_ids:
+                target = guild.get_member(uid)
+                if not target:
+                    not_found.append(str(uid))
+                    continue
 
+                if role in target.roles:
+                    already_have.append(target.mention)
+                else:
                     try:
-                        if vip_lounge_role in target.roles:
-                            await target.remove_roles(vip_lounge_role)
-                        if vip2_role not in target.roles:
-                            await target.add_roles(vip2_role)
+                        await target.add_roles(role)
                         success_users.append(target.mention)
+                        vip1_channel = bot.get_channel(VIP1_CHANNEL_ID)
+                        if vip1_channel:
+                            await vip1_channel.send(f"{target.mention} telah diberikan akses ke channel VIP 1")
                     except discord.Forbidden:
-                        print(f"⚠️ Gagal ubah role untuk {target} (izin tidak cukup)")
+                        print(f"⚠️ Gagal beri role ke {target} (izin tidak cukup)")
 
-                msg_parts = []
-                if success_users:
-                    msg_parts.append(f"✅ Berhasil ubah ke `VIP 2` untuk: {', '.join(success_users)}")
-                if not_found:
-                    msg_parts.append(f"❌ User tidak ditemukan: {len(not_found)} ID")
+            msg_parts = []
+            if success_users:
+                msg_parts.append(f"✅ Berhasil beri `VIP 1` ke: {', '.join(success_users)}")
+            if already_have:
+                msg_parts.append(f"ℹ️ Sudah punya role: {', '.join(already_have)}")
+            if not_found:
+                msg_parts.append(f"❌ User tidak ditemukan: {len(not_found)} ID")
 
-                await message.channel.send("\n".join(msg_parts))
+            await message.channel.send("\n".join(msg_parts))
 
-            # !!v @user1 @user2 ... → beri VIP LOUNGE
-            elif content.startswith("!!v "):
-                user_ids = extract_all_user_ids(content)
-                if not user_ids:
-                    await message.channel.send("❌ Tidak ada user yang valid. Gunakan: `!!v @user1 @user2` atau `!!v ID1 ID2`")
-                    return
+        # !!2 → beri VIP 2
+        elif content.startswith("!!2 "):
+            user_ids = []
+            mentions = re.findall(r'<@!?(\d+)>', content)
+            user_ids.extend([int(uid) for uid in mentions])
+            if not user_ids:
+                parts = content.split()
+                for part in parts[1:]:
+                    if part.isdigit() and len(part) >= 17:
+                        user_ids.append(int(part))
 
-                role = guild.get_role(VIP_LOUNGE_ROLE_ID)
-                if not role:
-                    await message.channel.send(f"❌ Role VIP LOUNGE (ID: {VIP_LOUNGE_ROLE_ID}) tidak ditemukan!")
-                    return
+            if not user_ids:
+                await message.channel.send("❌ Tidak ada user yang valid. Gunakan: `!!2 @user1 @user2` atau `!!2 ID1 ID2`")
+                return
 
-                success_users = []
-                already_have = []
-                not_found = []
+            role = guild.get_role(VIP2_ROLE_ID)
+            if not role:
+                await message.channel.send(f"❌ Role VIP 2 (ID: {VIP2_ROLE_ID}) tidak ditemukan!")
+                return
 
-                for uid in user_ids:
-                    target = guild.get_member(uid)
-                    if not target:
-                        not_found.append(str(uid))
-                        continue
+            success_users = []
+            already_have = []
+            not_found = []
 
-                    if role in target.roles:
-                        already_have.append(target.mention)
-                    else:
-                        try:
-                            await target.add_roles(role)
-                            success_users.append(target.mention)
-                        except discord.Forbidden:
-                            print(f"⚠️ Gagal beri role ke {target} (izin tidak cukup)")
+            for uid in user_ids:
+                target = guild.get_member(uid)
+                if not target:
+                    not_found.append(str(uid))
+                    continue
 
-                msg_parts = []
-                if success_users:
-                    msg_parts.append(f"✅ Berhasil beri role `VIP LOUNGE` ke: {', '.join(success_users)}")
-                if already_have:
-                    msg_parts.append(f"ℹ️ Sudah punya role: {', '.join(already_have)}")
-                if not_found:
-                    msg_parts.append(f"❌ User tidak ditemukan: {len(not_found)} ID")
+                if role in target.roles:
+                    already_have.append(target.mention)
+                else:
+                    try:
+                        await target.add_roles(role)
+                        success_users.append(target.mention)
+                        vip2_channel = bot.get_channel(VIP2_CHANNEL_ID)
+                        if vip2_channel:
+                            await vip2_channel.send(f"{target.mention} telah diberikan akses ke channel VIP 2")
+                    except discord.Forbidden:
+                        print(f"⚠️ Gagal beri role ke {target} (izin tidak cukup)")
 
-                await message.channel.send("\n".join(msg_parts))
+            msg_parts = []
+            if success_users:
+                msg_parts.append(f"✅ Berhasil beri `VIP 2` ke: {', '.join(success_users)}")
+            if already_have:
+                msg_parts.append(f"ℹ️ Sudah punya role: {', '.join(already_have)}")
+            if not_found:
+                msg_parts.append(f"❌ User tidak ditemukan: {len(not_found)} ID")
 
-            # !!1 @user1 @user2 ... → beri VIP 1
-            elif content.startswith("!!1 "):
-                user_ids = extract_all_user_ids(content)
-                if not user_ids:
-                    await message.channel.send("❌ Tidak ada user yang valid. Gunakan: `!!1 @user1 @user2` atau `!!1 ID1 ID2`")
-                    return
+            await message.channel.send("\n".join(msg_parts))
 
+        # !!r → hapus role
+        elif content.startswith("!!r "):
+            arg = content[4:].strip()
+
+            if arg.lower() == "vip1":
                 role = guild.get_role(VIP1_ROLE_ID)
                 if not role:
-                    await message.channel.send(f"❌ Role VIP 1 (ID: {VIP1_ROLE_ID}) tidak ditemukan!")
+                    await message.channel.send(f"❌ Role VIP 1 tidak ditemukan!")
                     return
-
-                success_users = []
-                already_have = []
-                not_found = []
-
-                for uid in user_ids:
-                    target = guild.get_member(uid)
-                    if not target:
-                        not_found.append(str(uid))
-                        continue
-
-                    if role in target.roles:
-                        already_have.append(target.mention)
-                    else:
+                members_to_remove = [m for m in guild.members if role in m.roles]
+                if not members_to_remove:
+                    await message.channel.send("ℹ️ Tidak ada user yang punya role `VIP 1`.")
+                else:
+                    for m in members_to_remove:
                         try:
-                            await target.add_roles(role)
-                            success_users.append(target.mention)
-                            vip1_channel = bot.get_channel(VIP1_CHANNEL_ID)
-                            if vip1_channel:
-                                await vip1_channel.send(f"{target.mention} telah diberikan akses ke channel VIP 1")
+                            await m.remove_roles(role)
                         except discord.Forbidden:
-                            print(f"⚠️ Gagal beri role ke {target} (izin tidak cukup)")
+                            print(f"⚠️ Tidak bisa hapus role dari {m} (izin tidak cukup)")
+                    await message.channel.send(f"✅ Berhasil hapus role `VIP 1` dari {len(members_to_remove)} user.")
 
-                msg_parts = []
-                if success_users:
-                    msg_parts.append(f"✅ Berhasil beri `VIP 1` ke: {', '.join(success_users)}")
-                if already_have:
-                    msg_parts.append(f"ℹ️ Sudah punya role: {', '.join(already_have)}")
-                if not_found:
-                    msg_parts.append(f"❌ User tidak ditemukan: {len(not_found)} ID")
-
-                await message.channel.send("\n".join(msg_parts))
-
-            # !!2 @user1 @user2 ... → beri VIP 2
-            elif content.startswith("!!2 "):
-                user_ids = extract_all_user_ids(content)
-                if not user_ids:
-                    await message.channel.send("❌ Tidak ada user yang valid. Gunakan: `!!2 @user1 @user2` atau `!!2 ID1 ID2`")
-                    return
-
+            elif arg.lower() == "vip2":
                 role = guild.get_role(VIP2_ROLE_ID)
                 if not role:
-                    await message.channel.send(f"❌ Role VIP 2 (ID: {VIP2_ROLE_ID}) tidak ditemukan!")
+                    await message.channel.send(f"❌ Role VIP 2 tidak ditemukan!")
+                    return
+                members_to_remove = [m for m in guild.members if role in m.roles]
+                if not members_to_remove:
+                    await message.channel.send("ℹ️ Tidak ada user yang punya role `VIP 2`.")
+                else:
+                    for m in members_to_remove:
+                        try:
+                            await m.remove_roles(role)
+                        except discord.Forbidden:
+                            print(f"⚠️ Tidak bisa hapus role dari {m} (izin tidak cukup)")
+                    await message.channel.send(f"✅ Berhasil hapus role `VIP 2` dari {len(members_to_remove)} user.")
+
+            elif arg.lower() == "viplounge":
+                role = guild.get_role(VIP_LOUNGE_ROLE_ID)
+                if not role:
+                    await message.channel.send(f"❌ Role VIP LOUNGE tidak ditemukan!")
+                    return
+                members_to_remove = [m for m in guild.members if role in m.roles]
+                if not members_to_remove:
+                    await message.channel.send("ℹ️ Tidak ada user yang punya role `VIP LOUNGE`.")
+                else:
+                    for m in members_to_remove:
+                        try:
+                            await m.remove_roles(role)
+                        except discord.Forbidden:
+                            print(f"⚠️ Tidak bisa hapus role dari {m} (izin tidak cukup)")
+                    await message.channel.send(f"✅ Berhasil hapus role `VIP LOUNGE` dari {len(members_to_remove)} user.")
+
+            else:
+                user_id = None
+                mention_match = re.search(r'<@!?(\d+)>', arg)
+                if mention_match:
+                    user_id = int(mention_match.group(1))
+                elif arg.isdigit() and len(arg) >= 17:
+                    user_id = int(arg)
+
+                if not user_id:
+                    await message.channel.send("❌ Format salah. Gunakan: `!!r @user`, `!!r ID`, atau `!!r vip1` / `!!r vip2` / `!!r viplounge`")
                     return
 
-                success_users = []
-                already_have = []
-                not_found = []
+                target = guild.get_member(user_id)
+                if not target:
+                    await message.channel.send("❌ User tidak ditemukan.")
+                    return
 
-                for uid in user_ids:
-                    target = guild.get_member(uid)
-                    if not target:
-                        not_found.append(str(uid))
-                        continue
+                roles_removed = []
+                vip1_role = guild.get_role(VIP1_ROLE_ID)
+                vip2_role = guild.get_role(VIP2_ROLE_ID)
+                vip_lounge_role = guild.get_role(VIP_LOUNGE_ROLE_ID)
 
-                    if role in target.roles:
-                        already_have.append(target.mention)
-                    else:
-                        try:
-                            await target.add_roles(role)
-                            success_users.append(target.mention)
-                            vip2_channel = bot.get_channel(VIP2_CHANNEL_ID)
-                            if vip2_channel:
-                                await vip2_channel.send(f"{target.mention} telah diberikan akses ke channel VIP 2")
-                        except discord.Forbidden:
-                            print(f"⚠️ Gagal beri role ke {target} (izin tidak cukup)")
+                if vip1_role and vip1_role in target.roles:
+                    await target.remove_roles(vip1_role)
+                    roles_removed.append("VIP 1")
+                if vip2_role and vip2_role in target.roles:
+                    await target.remove_roles(vip2_role)
+                    roles_removed.append("VIP 2")
+                if vip_lounge_role and vip_lounge_role in target.roles:
+                    await target.remove_roles(vip_lounge_role)
+                    roles_removed.append("VIP LOUNGE")
 
-                msg_parts = []
-                if success_users:
-                    msg_parts.append(f"✅ Berhasil beri `VIP 2` ke: {', '.join(success_users)}")
-                if already_have:
-                    msg_parts.append(f"ℹ️ Sudah punya role: {', '.join(already_have)}")
-                if not_found:
-                    msg_parts.append(f"❌ User tidak ditemukan: {len(not_found)} ID")
-
-                await message.channel.send("\n".join(msg_parts))
-
-            # !!r ... → hapus role
-            elif content.startswith("!!r "):
-                arg = content[4:].strip()
-
-                if arg.lower() == "vip1":
-                    role = guild.get_role(VIP1_ROLE_ID)
-                    if not role:
-                        await message.channel.send(f"❌ Role VIP 1 tidak ditemukan!")
-                        return
-                    members_to_remove = [m for m in guild.members if role in m.roles]
-                    if not members_to_remove:
-                        await message.channel.send("ℹ️ Tidak ada user yang punya role `VIP 1`.")
-                    else:
-                        for m in members_to_remove:
-                            try:
-                                await m.remove_roles(role)
-                            except discord.Forbidden:
-                                print(f"⚠️ Tidak bisa hapus role dari {m} (izin tidak cukup)")
-                        await message.channel.send(f"✅ Berhasil hapus role `VIP 1` dari {len(members_to_remove)} user.")
-
-                elif arg.lower() == "vip2":
-                    role = guild.get_role(VIP2_ROLE_ID)
-                    if not role:
-                        await message.channel.send(f"❌ Role VIP 2 tidak ditemukan!")
-                        return
-                    members_to_remove = [m for m in guild.members if role in m.roles]
-                    if not members_to_remove:
-                        await message.channel.send("ℹ️ Tidak ada user yang punya role `VIP 2`.")
-                    else:
-                        for m in members_to_remove:
-                            try:
-                                await m.remove_roles(role)
-                            except discord.Forbidden:
-                                print(f"⚠️ Tidak bisa hapus role dari {m} (izin tidak cukup)")
-                        await message.channel.send(f"✅ Berhasil hapus role `VIP 2` dari {len(members_to_remove)} user.")
-
-                elif arg.lower() == "viplounge":
-                    role = guild.get_role(VIP_LOUNGE_ROLE_ID)
-                    if not role:
-                        await message.channel.send(f"❌ Role VIP LOUNGE tidak ditemukan!")
-                        return
-                    members_to_remove = [m for m in guild.members if role in m.roles]
-                    if not members_to_remove:
-                        await message.channel.send("ℹ️ Tidak ada user yang punya role `VIP LOUNGE`.")
-                    else:
-                        for m in members_to_remove:
-                            try:
-                                await m.remove_roles(role)
-                            except discord.Forbidden:
-                                print(f"⚠️ Tidak bisa hapus role dari {m} (izin tidak cukup)")
-                        await message.channel.send(f"✅ Berhasil hapus role `VIP LOUNGE` dari {len(members_to_remove)} user.")
-
+                if roles_removed:
+                    await message.channel.send(f"✅ Berhasil hapus role {', '.join(roles_removed)} dari {target.mention}")
                 else:
-                    user_id = None
-                    mention_match = re.search(r'<@!?(\d+)>', arg)
-                    if mention_match:
-                        user_id = int(mention_match.group(1))
-                    elif arg.isdigit() and len(arg) >= 17:
-                        user_id = int(arg)
+                    await message.channel.send(f"ℹ️ {target.mention} tidak punya role VIP.")
 
-                    if not user_id:
-                        await message.channel.send("❌ Format salah. Gunakan: `!!r @user`, `!!r ID`, atau `!!r vip1` / `!!r vip2` / `!!r viplounge`")
-                        return
-
-                    target = guild.get_member(user_id)
-                    if not target:
-                        await message.channel.send("❌ User tidak ditemukan.")
-                        return
-
-                    roles_removed = []
-                    vip1_role = guild.get_role(VIP1_ROLE_ID)
-                    vip2_role = guild.get_role(VIP2_ROLE_ID)
-                    vip_lounge_role = guild.get_role(VIP_LOUNGE_ROLE_ID)
-
-                    if vip1_role and vip1_role in target.roles:
-                        await target.remove_roles(vip1_role)
-                        roles_removed.append("VIP 1")
-                    if vip2_role and vip2_role in target.roles:
-                        await target.remove_roles(vip2_role)
-                        roles_removed.append("VIP 2")
-                    if vip_lounge_role and vip_lounge_role in target.roles:
-                        await target.remove_roles(vip_lounge_role)
-                        roles_removed.append("VIP LOUNGE")
-
-                    if roles_removed:
-                        await message.channel.send(f"✅ Berhasil hapus role {', '.join(roles_removed)} dari {target.mention}")
-                    else:
-                        await message.channel.send(f"ℹ️ {target.mention} tidak punya role VIP.")
-
-            await bot.process_commands(message)
-            return
-
-        except Exception as e:
-            print(f"❌ Error di VIP command: {e}")
-            traceback.print_exc()
-            await message.channel.send("⚠️ Terjadi kesalahan saat menjalankan perintah VIP.")
-            return
+        # Penting: JANGAN panggil bot.process_commands() → agar tidak muncul CommandNotFound
+        # Hanya return setelah selesai
+        return
 
     # --- HANDLE VERIFIKASI ROBLOX ---
     if message.channel.id in [INTRO_CHANNEL_ID, CHANGE_NAME_CHANNEL_ID]:
@@ -531,7 +507,9 @@ async def on_message(message):
         elif message.channel.id == CHANGE_NAME_CHANNEL_ID:
             await handle_verification(message, guild, member, is_new_user=False)
 
-    await bot.process_commands(message)
+    # Jangan proses command lain (karena kita tidak pakai @bot.command)
+    # Tapi biarkan message biasa tetap diproses (misal verifikasi)
+    return
 
 # === JALANKAN BOT ===
 if __name__ == "__main__":
